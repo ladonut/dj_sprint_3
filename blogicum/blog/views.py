@@ -1,31 +1,58 @@
-from django.shortcuts import render
+from typing import Union
 
-from django.http import Http404
-
-
-def index(request):
-    template = 'blog/index.html'
-    context = {'posts': []}
-    return render(request, template, context)
+from django.conf import settings
+from django.shortcuts import render, get_object_or_404
+from django.http import HttpRequest, HttpResponse
+from django.utils.timezone import now 
+from blog.models import Post, Location, Category
 
 
-def post_detail(request, id):
-    template = 'blog/detail.html'
-    post = None
-    global posts_dictionary
-
-    # Find post by its id key
-    if id in posts_dictionary:
-        post = posts_dictionary[id]
-
-    if post is None:
-        raise Http404(f'Post {id} not found')
-
-    context = {'post': post}
-    return render(request, template, context)
+def index(request: HttpRequest) -> HttpResponse:
+    post_list = Post.objects.select_related(
+        'author', 'category', 'location',
+    ).filter(
+        is_published=True,
+        pub_date__lt=now(),
+        category__is_published=True, 
+    )[:settings.POSTS_BY_PAGE]
+    
+    return render(request, 'blog/index.html', {'post_list': post_list})
 
 
-def category_posts(request, category_slug):
-    template = 'blog/category.html'
-    context = {'slug': category_slug}
-    return render(request, template, context)
+def post_detail(request: HttpRequest, post_id: int) -> HttpResponse:
+    post = get_object_or_404(
+        Post.objects.select_related(
+            'author', 'category', 'location'
+        ).filter(
+            is_published=True,
+            pub_date__lt=now(),
+            category__is_published=True,
+        ),
+        id=post_id
+    )
+
+    return render(request, 'blog/detail.html', {'post': post})
+
+
+def category_posts(request: HttpRequest, category_slug) -> HttpResponse:
+    category = get_object_or_404(
+        Category.objects,
+        slug=category_slug,
+        is_published=True
+    )
+
+    post_list = Post.objects.select_related(
+        'author', 'category', 'location',
+    ).filter(
+        is_published=True,
+        pub_date__lt=now(),
+        category__is_published=True,
+        category__slug=category_slug
+    )
+    
+    return render(request, 'blog/category.html', {
+        'category': category,
+        'post_list': post_list
+    })
+
+
